@@ -1,0 +1,54 @@
+#!/bin/bash
+
+source orkhideya-root
+ork_include fw
+ork_include if
+ork_include ipv4
+ork_include net
+ork_include stdlib
+ork_include stdout
+ork_include tor
+
+_gateway_interface="$1"
+
+if [ -z "$_gateway_interface" -o "$_gateway_interface" == "-"  ]; then
+   _gateway_interface="$(if_gateway_interface)"
+fi
+
+_new_tor_root="$2"
+
+if [ -z "$_new_tor_root" ]; then
+   _new_tor_root="tor"
+fi
+
+_router_interface="$(if_class_create router "$_gateway_interface" "$_new_tor_root")"
+[ -z "$_router_interface" ] && exit 2
+! if_interface_exists "$_router_interface" && exit 3
+
+function tor_creation_cleanup
+{
+   tor_stop "$_router_interface"
+   if_class_destroy router "$_router_interface"
+}
+
+stdlib_trap_cleanup_push tor_creation_cleanup
+
+stdout_warning "Redirecting DNS traffic."
+stdlib_trap fw_insert_4 prerouting 1 -i "$_router_interface" -p udp -m udp --dport 53 -j REDIRECT --to-ports 5353
+
+stdout_warning "Redirecting TCP traffic."
+stdlib_trap fw_insert_4 prerouting 1 -i "$_router_interface" ! -d "$(if_interface_ipv4_network "$_gateway_interface")" -p tcp -m tcp -j REDIRECT --to-ports 9051
+
+stdout_warning "Choking off $(stdout_color_wrap main-focused "$_router_interface") from $(stdout_color_wrap main-focused "$_gateway_interface")."
+stdlib_trap fw_rule_interface_apply "$_router" choked "$_gateway"
+
+stdout_warning "Choking off $(stdout_color_wrap main-focused "$_router_interface") from itself."
+stdlib_trap fw_rule_interface_apply "$_router" choked "$_router"
+
+stdout_warning "Starting tor service."
+stdlib_trap tor_start "$_router"
+
+stdout_normal "Tor router created."
+
+echo "$_router_interface"
+exit 0

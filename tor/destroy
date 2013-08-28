@@ -1,0 +1,27 @@
+#!/bin/bash
+
+source orkhideya-root
+ork_include bind
+ork_include dhcpd
+ork_include if
+ork_include fw
+ork_include ipv4
+ork_include stdlib
+ork_include stdout
+
+_interface="$1"
+[ -z "$_interface" ] && exit 1
+! if_interface_exists "$_interface" && exit 2
+
+stdout_normal "Stopping tor."
+tor_stop "$_interface"
+
+stdout_warning "Clearing the firewall."
+stdlib_trap fw_clear_interface_d prerouting "$_interface"
+
+stdout_warning "Destroying $(stdout_color_wrap main-focused "$_interface")."
+stdlib_trap if_class_destroy router "$_interface"
+
+stdout_normal "Tor router  destroyed."
+
+exit 0
