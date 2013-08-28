@@ -1,0 +1,35 @@
+#!/bin/bash
+
+source orkhideya-root
+ork_include if
+ork_include stdlib
+
+_bridge_interface="$1"
+[ -z "$_bridge_interface" ] && exit 1
+! if_interface_exists "$_bridge_interface" && exit 2
+
+_new_root="$2"
+
+if [ -z "$_new_root" ]; then
+   _new_root="tun"
+fi
+
+_new_interface="$(if_interface_unique_name "$_new_root")"
+! tunctl -b -g wheel -t "$_new_interface" &>/dev/null && exit 3
+
+function tunnel_cleanup
+{
+   tunctl -d "$_new_interface"
+}
+
+stdlib_trap_cleanup_push tunnel_cleanup
+
+stdout_warning "Connecting new tunnel $(stdout_color_wrap main-focused "$_new_interface") to $(stdout_color_wrap main-focused "$_bridge_interface")."
+stdlib_trap brctl addif "$_bridge_interface" "$_new_interface"
+
+stdlib_trap_cleanup_pop
+
+stdout_normal "New tunnel device created."
+
+echo "$_new_interface"
+exit 0

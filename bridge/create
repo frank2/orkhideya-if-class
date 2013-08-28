@@ -1,0 +1,16 @@
+#!/bin/bash
+
+source orkhideya-root
+ork_include if
+
+_new_root="$1"
+
+if [ -z "$_new_root" ]; then
+   _new_root="br"
+fi
+
+_new_interface="$(if_interface_unique_name "$_new_root")"
+! brctl addbr "$_new_interface" && exit 1
+
+echo "$_new_interface"
+exit 0

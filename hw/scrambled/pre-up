@@ -1,0 +1,23 @@
+#!/bin/bash
+
+source orkhideya
+ork_include if
+ork_include iw
+ork_include mac
+ork_include stdout
+
+_device="$1"
+! if_dev_exists "$_device" && exit 1
+
+_interface="$(if_dev_interface "$_device")"
+[ -z "$_interface" ] && exit 2
+! if_interface_exists "$_interface" && exit 3
+
+if [ "$(iw_dev_get_mode "$_device")" != "monitor" ]; then
+   _new_address="$(mac_random)"
+   ! if_interface_ether_set "$_interface" "$_new_address" && exit 4
+
+   stdout_normal "$(stdout_color_wrap main-focused "$_device") has new hardware address: $(stdout_color_wrap main-focused "$_new_address")"
+fi
+
+exit 0

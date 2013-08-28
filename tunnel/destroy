@@ -1,0 +1,11 @@
+#!/bin/bash
+
+source orkhideya-root
+ork_include if
+
+_interface="$1"
+! if_interface_exists "$_interface" && exit 1
+! if_interface_down "$_interface" && exit 2
+! tunctl -d "$_interface" && exit 3
+
+exit 0

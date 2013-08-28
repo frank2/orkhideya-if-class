@@ -1,0 +1,17 @@
+#!/bin/bash
+
+source orkhideya
+ork_include if
+ork_include iw
+ork_include mac
+ork_include stdout
+
+_device="$1"
+! if_dev_exists "$_device" && exit 1
+
+_interface="$(if_dev_interface "$_device")"
+[ -z "$_interface" ] && exit 2
+! if_interface_exists "$_interface" && exit 3
+
+! if_interface_address_set inet 0 && exit 0
+exit 0
