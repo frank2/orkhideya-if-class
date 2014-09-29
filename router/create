@@ -6,7 +6,6 @@ ork_include dhcpd
 ork_include fw
 ork_include if
 ork_include ipv4
-ork_include net
 ork_include stdlib
 ork_include stdout
 
@@ -37,32 +36,40 @@ function router_creation_cleanup
 
 stdlib_trap_cleanup_push router_creation_cleanup
 
-_random_local_network="$(ipv4_random_private_network 24)"
+_router_network="$3"
 
-while [ -n "$(if_interface_by_network "$_random_local_network")" ]; do
-   _random_local_network="$(ipv4_random_private_network)"
-done
+if [ -z "$_router_network" ]; then
+   _random_local_network="$(ipv4_random_private_network 24)"
 
-stdout_normal "New network is $(stdout_color_wrap main-focused "$_random_local_network")."
+   while [ -n "$(if_interface_by_network "$_random_local_network")" ]; do
+      _random_local_network="$(ipv4_random_private_network)"
+   done
 
-_router_address="$(ipv4_to_int "$(ipv4_cidr_network "$_random_local_network")")"
-_router_address="$(ipv4_from_int "$(($_router_address+1))")"
-_router_netmask="$(ipv4_cidr_netmask "$_random_local_network")"
+   stdout_normal "New network is $(stdout_color_wrap main-focused "$_random_local_network")."
+
+   _router_network="$_random_local_network"
+fi
+
+_router_address="$4"
+
+if [ -z "$_router_address" ]; then
+   _router_address="$(ipv4_to_int "$(ipv4_cidr_network "$_router_network")")"
+   _router_address="$(ipv4_from_int "$(($_router_address+1))")"
+fi
+
+_router_netmask="$(ipv4_cidr_netmask "$_router_network")"
 
 stdout_warning "Setting $(stdout_color_wrap main-focused "$_bridge_interface") to $(stdout_color_wrap main-focused "$_router_address")."
 stdlib_trap if_interface_address_set "$_bridge_interface" inet "$_router_address" netmask "$_router_netmask"
 
-stdout_warning "Establishing gateway to $(stdout_color_wrap main-focused "$_gateway_interface")."
+stdout_warning "Establishing gateway loopback."
 stdlib_trap fw_rule_interface_apply "$_bridge_interface" gateway "$_gateway_interface"
+
+#stdout_warning "Establishing gateway to $(stdout_color_wrap main-focused "$_gateway_interface")."
+#stdlib_trap fw_rule_interface_apply "$_bridge_interface" gateway "$_gateway_interface"
 
 stdout_warning "Bringing up $(stdout_color_wrap main-focused "$_bridge_interface")."
 stdlib_trap if_interface_up "$_bridge_interface"
-
-stdout_warning "Starting bind server for $(stdout_color_wrap main-focused "$_bridge_interface")."
-stdlib_trap bind_start "$_bridge_interface" router
-
-stdout_warning "Starting dhcp server for $(stdout_color_wrap main-focused "$_bridge_interface")."
-stdlib_trap dhcpd_start "$_bridge_interface" router
 
 stdlib_trap_cleanup_pop
 

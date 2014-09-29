@@ -13,12 +13,6 @@ _interface="$1"
 [ -z "$_interface" ] && exit 1
 ! if_interface_exists "$_interface" && exit 2
 
-stdout_normal "Stopping DHCP."
-dhcpd_stop "$_interface"
-
-stdout_normal "Stopping BIND."
-bind_stop "$_interface"
-
 stdout_warning "Clearing the firewall."
 stdlib_trap fw_clear_interface_d input "$_interface"
 stdlib_trap fw_clear_interface_d output "$_interface"

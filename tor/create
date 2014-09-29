@@ -4,10 +4,9 @@ source orkhideya-root
 ork_include fw
 ork_include if
 ork_include ipv4
-ork_include net
+ork_include proc
 ork_include stdlib
 ork_include stdout
-ork_include tor
 
 _gateway_interface="$1"
 
@@ -15,40 +14,50 @@ if [ -z "$_gateway_interface" -o "$_gateway_interface" == "-"  ]; then
    _gateway_interface="$(if_gateway_interface)"
 fi
 
-_new_tor_root="$2"
+_tor_root="$2"
 
-if [ -z "$_new_tor_root" ]; then
-   _new_tor_root="tor"
+if [ -z "$_tor_root" -o "$_tor_root" == "-" ]; then
+   _tor_root="tor"
 fi
 
-_router_interface="$(if_class_create router "$_gateway_interface" "$_new_tor_root")"
-[ -z "$_router_interface" ] && exit 2
-! if_interface_exists "$_router_interface" && exit 3
+_tor_network="$3"
+
+if [ -z "$_tor_network" -o "$_tor_network" == "-" ]; then
+   _tor_network="172.16.160.0/20"
+fi
+
+_tor_interface="$(if_class_create router "$_gateway_interface" "$_tor_root" "$_tor_network")"
+[ -z "$_tor_interface" ] && exit 2
+! if_interface_exists "$_tor_interface" && exit 3
+
+_tor_address="$(ipv4_to_int "$(ipv4_cidr_network "$_tor_network")")"
+_tor_address="$(ipv4_from_int "$(($_tor_address+1))")"
+_tor_label="tor-${_tor_interface}"
 
 function tor_creation_cleanup
 {
-   tor_stop "$_router_interface"
-   if_class_destroy router "$_router_interface"
+   proc_label_kill "$_tor_label"
+   if_class_destroy router "$_tor_interface"
 }
 
 stdlib_trap_cleanup_push tor_creation_cleanup
 
 stdout_warning "Redirecting DNS traffic."
-stdlib_trap fw_insert_4 prerouting 1 -i "$_router_interface" -p udp -m udp --dport 53 -j REDIRECT --to-ports 5353
+stdlib_trap fw_insert_4 prerouting 1 -t nat -i "$_tor_interface" -p udp -m udp --dport 53 -j REDIRECT --to-ports 5353
 
-stdout_warning "Redirecting TCP traffic."
-stdlib_trap fw_insert_4 prerouting 1 -i "$_router_interface" ! -d "$(if_interface_ipv4_network "$_gateway_interface")" -p tcp -m tcp -j REDIRECT --to-ports 9051
+stdout_warning "Redirecting external TCP traffic."
+stdlib_trap fw_insert_4 prerouting 1 -t nat -i "$_tor_interface" ! -d "$_tor_address" -p tcp -m tcp -j REDIRECT --to-ports 9051
 
-stdout_warning "Choking off $(stdout_color_wrap main-focused "$_router_interface") from $(stdout_color_wrap main-focused "$_gateway_interface")."
-stdlib_trap fw_rule_interface_apply "$_router" choked "$_gateway"
+#stdout_warning "Choking off $(stdout_color_wrap main-focused "$_tor_interface") from $(stdout_color_wrap main-focused "$_gateway_interface")."
+#stdlib_trap fw_rule_interface_apply "$_router" choked "$_gateway"
 
-stdout_warning "Choking off $(stdout_color_wrap main-focused "$_router_interface") from itself."
-stdlib_trap fw_rule_interface_apply "$_router" choked "$_router"
+#stdout_warning "Choking off $(stdout_color_wrap main-focused "$_tor_interface") from itself."
+#stdlib_trap fw_rule_interface_apply "$_router" choked "$_router"
 
 stdout_warning "Starting tor service."
-stdlib_trap tor_start "$_router"
+stdlib_trap proc_label_spawn "$_tor_label" tor -f "$(if_class_path tor)/torrc"
 
 stdout_normal "Tor router created."
 
-echo "$_router_interface"
+echo "$_tor_interface"
 exit 0
